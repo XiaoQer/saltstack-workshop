@@ -1,0 +1,57 @@
+boxes = [
+	{
+		:name => "salt-master",
+		:eth1 => "192.168.56.20",
+		:mem => "1024",
+		:cpu => "1",
+		:sshport => 22230,
+		:shell => "
+        sudo iptables -F
+        sudo apt-get update
+        echo y | sudo apt-get install salt-master
+        sudo systemctl status  salt-master
+        "
+	},
+	{
+		:name => "salt-minion",
+		:eth1 => "192.168.56.21",
+		:mem => "1024",
+		:cpu => "1",
+		:sshport => 22231,
+		:shell => "
+        sudo iptables -F
+        sudo apt-get update
+        echo y | sudo apt-get install salt-minion
+        cat <<EOF > /etc/salt/minion.d/f_defaults.conf
+        master: '192.168.56.20'
+        mine_interval: 60
+        pillarenv_from_saltenv: true
+        EOF
+        sudo systemctl status  salt-minion
+		"
+	}
+]
+
+
+Vagrant.configure(2) do |config|
+	config.vm.box = "hashicorp/bionic64"
+	Encoding.default_external = 'UTF-8'
+	boxes.each do |opts|
+		config.vm.define opts[:name] do |config|
+			config.vm.hostname = opts[:name]
+			config.vm.network "private_network", ip: opts[:eth1]
+			config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh", disabled: "true"
+			config.vm.network "forwarded_port", guest: 22, host: opts[:sshport]
+			config.vm.provider "vmware_fusion" do |v|
+				v.vmx["memsize"] = opts[:mem]
+				v.vmx["numvcpus"] = opts[:cpu]
+			end
+			config.vm.provider "virtualbox" do |v|
+				v.memory = opts[:mem];
+				v.cpus = opts[:cpu];
+				v.name = opts[:name];
+			end
+			  config.vm.provision "shell", inline: opts[:shell]
+		end
+	end
+end
